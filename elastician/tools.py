@@ -1,4 +1,5 @@
 import gzip
+import hashlib
 import logging
 import os
 import json
@@ -197,6 +198,18 @@ def dump_func_slice(index, hosts, username, pwd, crtfile, verify_cert, timeout, 
         pool.map(prod_x, info_items)
 
 
+def hash_path(path):
+    bits = path.split('/')
+    out_bits = []
+    for i, bit in enumerate(bits):
+        if i == len(bits) - 1:
+            name, ext = os.path.splitext(bit)
+            out_bits.append(hashlib.md5(name).hexdigest() + '.' + ext)
+        else:
+            out_bits.append(hashlib.md5(bit).hexdigest())
+    return '/'.join(out_bits)
+
+
 def dump_func(index, es_source, timeout, size, query, sort):
     file_name = index.replace('.', '_') + '_dump.jsonl.gz'
     logger.info(f'Dumping {index} to {file_name}')
@@ -210,6 +223,8 @@ def dump_func(index, es_source, timeout, size, query, sort):
         try:
             for d in tqdm(helpers.scan(es_source, index=index, query=q, sort={sort[0]: sort[1]},
                                        scroll=timeout, raise_on_error=True, preserve_order=False, size=size)):
+                if 'path' in d['_source']:
+                    d['_source']['path'] = hash_path(d['_source']['path'])
                 out.write(("%s\n" % json.dumps({
                     '_source': d['_source'],
                     '_index': d['_index'],
